@@ -1,0 +1,42 @@
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="minidbeaver.controller.LoginController"
+      alignment="CENTER"
+      spacing="15"
+      prefWidth="600"
+      prefHeight="400">
+
+    <Label text="MiniDBeaver"/>
+
+    <GridPane alignment="CENTER" hgap="10" vgap="15">
+
+        <Label text="Host:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+        <TextField fx:id="hostField"
+                   GridPane.rowIndex="0"
+                   GridPane.columnIndex="1"/>
+
+        <Label text="Usuario:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+        <TextField fx:id="usernameField"
+                   GridPane.rowIndex="1"
+                   GridPane.columnIndex="1"/>
+
+        <Label text="Contraseña:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+        <PasswordField fx:id="passwordField"
+                       GridPane.rowIndex="2"
+                       GridPane.columnIndex="1"/>
+
+    </GridPane>
+
+    <Button text="Conectar" onAction="#onConnect"/>
+
+    <Label fx:id="messageLabel"/>
+
+</VBox>
