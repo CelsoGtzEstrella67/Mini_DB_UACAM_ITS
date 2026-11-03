@@ -32,7 +32,7 @@ public class App extends Application {
         stage.show();
     }
 
-    public static GestionSQLite getDatabase() { return database; } // <-- Retorna GestionSQLite
+    public static GestionSQLite getDatabase() { return database; }
     public static ConexionSSH getSshConnection() { return sshConnection; }
     public static GestionMariaDB getMariaDB() { return mariaDB; }
 
