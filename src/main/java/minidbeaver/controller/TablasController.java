@@ -171,11 +171,21 @@ public class TablasController {
             messageLabel.setText("Selecciona un registro de la tabla primero.");
             return;
         }
-        if (!selectedRecord.containsKey("id") && !selectedRecord.containsKey("ID")) {
+
+        // 🔍 BUSCADOR INTELIGENTE DE LA LLAVE ID
+        String idKey = null;
+        for (String key : selectedRecord.keySet()) {
+            String cleanKey = key.trim();
+            if (cleanKey.equalsIgnoreCase("id") || cleanKey.toLowerCase().endsWith("_id") || cleanKey.toLowerCase().startsWith("id_")) {
+                idKey = key; // Encontramos la columna exacta (ej: "id", "ID", "id_usuario", "Id")
+                break;
+            }
+        }
+
+        if (idKey == null) {
             messageLabel.setText("La tabla debe tener una columna 'id' para actualizar.");
             return;
         }
-        String idKey = selectedRecord.containsKey("id") ? "id" : "ID";
 
         ArrayList<String> columns = new ArrayList<>();
         for (TableColumn<Map<String, Object>, ?> column : recordsTable.getColumns()) {
@@ -204,6 +214,8 @@ public class TablasController {
         if (sqliteDb.ejecutarInstruccionCRUD(sql, newValue.get(), selectedRecord.get(idKey))) {
             refreshRecords(selectedTable);
             messageLabel.setText("Registro modificado en SQLite.");
+        } else {
+            messageLabel.setText("Error al ejecutar la actualización en SQLite.");
         }
     }
 
@@ -216,8 +228,18 @@ public class TablasController {
             messageLabel.setText("Selecciona un registro primero.");
             return;
         }
-        String idKey = selectedRecord.containsKey("id") ? "id" : "ID";
-        if (!selectedRecord.containsKey(idKey)) {
+
+        // 🔍 BUSCADOR INTELIGENTE DE LA LLAVE ID
+        String idKey = null;
+        for (String key : selectedRecord.keySet()) {
+            String cleanKey = key.trim();
+            if (cleanKey.equalsIgnoreCase("id") || cleanKey.toLowerCase().endsWith("_id") || cleanKey.toLowerCase().startsWith("id_")) {
+                idKey = key;
+                break;
+            }
+        }
+
+        if (idKey == null) {
             messageLabel.setText("No se encontró una columna llave id.");
             return;
         }
@@ -225,7 +247,7 @@ public class TablasController {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Eliminar registro");
         alert.setHeaderText("¿Deseas eliminar este registro local?");
-        alert.setContentText("ID: " + selectedRecord.get(idKey));
+        alert.setContentText("Columna Llave: " + idKey + " | Valor ID: " + selectedRecord.get(idKey));
         Optional<ButtonType> result = alert.showAndWait();
 
         if (result.isPresent() && result.get() == ButtonType.OK) {
@@ -233,9 +255,12 @@ public class TablasController {
             if (sqliteDb.ejecutarInstruccionCRUD(sql, selectedRecord.get(idKey))) {
                 refreshRecords(selectedTable);
                 messageLabel.setText("Registro eliminado localmente.");
+            } else {
+                messageLabel.setText("Error al eliminar el registro de SQLite.");
             }
         }
     }
+
 
     private void refreshRecords(String tableName) {
         try {
