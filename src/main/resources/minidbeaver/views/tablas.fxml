@@ -1,51 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
 
-
+<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.TableView?>
-<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
 
-<VBox xmlns="http://javafx.com/javafx"
-      xmlns:fx="http://javafx.com/fxml"
-      fx:controller="minidbeaver.controller.TablasController"
-      alignment="CENTER"
-      spacing="12"
-      prefWidth="750"
-      prefHeight="500">
+<VBox alignment="CENTER" prefHeight="542.0" prefWidth="932.0" spacing="12" xmlns="http://javafx.com/javafx/26" xmlns:fx="http://javafx.com/fxml/1" fx:controller="minidbeaver.controller.TablasController">
 
-    <Label text="MiniDBeaver"/>
+    <Label alignment="CENTER" text="MiniDBeaver" textAlignment="CENTER">
+      <VBox.margin>
+         <Insets bottom="10.0" top="10.0" />
+      </VBox.margin>
+      <font>
+         <Font size="14.0" />
+      </font></Label>
 
-    <HBox spacing="15">
+    <HBox alignment="CENTER" spacing="15" VBox.vgrow="ALWAYS">
+      <VBox prefHeight="459.0" prefWidth="161.0">
+         <children>
+            <Label text="Host" />
+            <TextField />
+            <Label text="Usuario" />
+            <TextField />
+            <Label text="Contraseña" />
+            <PasswordField prefWidth="162.0" />
+            <Label text="base de datos" />
+            <TextField />
+            <Button mnemonicParsing="false" onAction="#onConnect" text="Connectar!">
+               <VBox.margin>
+                  <Insets left="20.0" top="10.0" />
+               </VBox.margin>
+            </Button>
+         </children>
+      </VBox>
 
         <VBox spacing="10">
-            <Label text="Tablas del servidor:"/>
+            <Label text="Tablas del servidor:" />
 
-            <ListView fx:id="tablesList"
-                      prefWidth="200"
-                      prefHeight="250"/>
+            <ListView fx:id="tablesList" prefHeight="302.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
 
-            <Button text="Descargar tabla a SQLite"
-                    onAction="#onDownload"/>
+            <Button onAction="#onDownload" text="Descargar tabla a SQLite" />
         </VBox>
 
         <VBox spacing="10">
-            <Label text="Registros de la tabla:"/>
+            <Label text="Registros de la tabla:" />
 
-            <TableView fx:id="recordsTable"
-                       prefWidth="450"
-                       prefHeight="300"/>
+            <TableView fx:id="recordsTable" prefHeight="300.0" prefWidth="550.0" VBox.vgrow="ALWAYS" />
+      
+          <HBox spacing="10">
+              <Button onAction="#onAdd" text="Agregar" />
+              <Button onAction="#onUpdate" text="Modificar" />
+              <Button onAction="#onDelete" text="Eliminar" />
+          </HBox>
         </VBox>
 
     </HBox>
 
-    <Label fx:id="messageLabel"/>
-
-    <HBox spacing="10">
-        <Button text="Agregar" onAction="#onAdd"/>
-        <Button text="Modificar" onAction="#onUpdate"/>
-        <Button text="Eliminar" onAction="#onDelete"/>
-    </HBox>
+    <Label fx:id="messageLabel" />
 
 </VBox>

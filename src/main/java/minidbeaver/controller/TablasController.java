@@ -1,6 +1,3 @@
-
-
-
 package minidbeaver.controller;
 
 import javafx.fxml.FXML;
@@ -8,23 +5,25 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TableColumn;
-import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.beans.property.ReadOnlyObjectWrapper;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
-import minidbeaver.database.local.SQLiteDatabase;
-import minidbeaver.database.local.SQLiteTabla;
+import minidbeaver.App;
+import connections.GestionSQLite; // <-- Tu modelo
+import connections.GestionMariaDB;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class TablasController {
@@ -38,269 +37,238 @@ public class TablasController {
     @FXML
     private Label messageLabel;
 
-    private SQLiteDatabase database;
-
-    private SQLiteTabla sqliteTabla;
+    private GestionSQLite sqliteDb; // <-- Tu manejador de SQLite
 
     public void initialize() {
-
-        tablesList.getItems().addAll(
-                "prueba_flexible"
-        );
-
+        tablesList.getItems().clear();
+        // Al iniciar la pantalla, recuperamos de App la instancia ya abierta de tu SQLite
+        this.sqliteDb = App.getDatabase();
     }
 
     @FXML
-    private void onDownload() {
+    private void onConnect() {
+        try {
+            TextInputDialog dbDialog = new TextInputDialog("its5a");
+            dbDialog.setTitle("Conectar a MariaDB");
+            dbDialog.setHeaderText("Configuración de Base de Datos");
+            dbDialog.setContentText("Nombre de la Base de Datos:");
+            Optional<String> dbResult = dbDialog.showAndWait();
+            if (dbResult.isEmpty()) return;
 
-        String selectedTable = tablesList.getSelectionModel().getSelectedItem();
+            TextInputDialog userDialog = new TextInputDialog("root");
+            userDialog.setTitle("Conectar a MariaDB");
+            userDialog.setHeaderText("Credenciales de Acceso");
+            userDialog.setContentText("Usuario de la BD:");
+            Optional<String> userResult = userDialog.showAndWait();
+            if (userResult.isEmpty()) return;
 
-        if (selectedTable == null) {
-            messageLabel.setText("Selecciona una tabla primero.");
-            return;
+            TextInputDialog passDialog = new TextInputDialog();
+            passDialog.setTitle("Conectar a MariaDB");
+            passDialog.setHeaderText("Credenciales de Acceso");
+            passDialog.setContentText("Contraseña de la BD:");
+            Optional<String> passResult = passDialog.showAndWait();
+            if (passResult.isEmpty()) return;
+
+            messageLabel.setText("Conectando a MariaDB a través del túnel...");
+
+            GestionMariaDB mariaDB = App.getMariaDB();
+            if (mariaDB.conectar(dbResult.get(), userResult.get(), passResult.get())) {
+                messageLabel.setText("¡Conectado a MariaDB! Cargando listado de tablas...");
+                List<String> tablasRemotas = mariaDB.obtenerListadoTablas();
+                tablesList.getItems().clear();
+                tablesList.getItems().addAll(tablasRemotas);
+            } else {
+                messageLabel.setText("Error: Credenciales de MariaDB incorrectas.");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            messageLabel.setText("Error al conectar MariaDB: " + e.getMessage());
         }
+    }
 
-        if (sqliteTabla == null) {
-            messageLabel.setText("No hay conexión con SQLite.");
+    /**
+     * BOTÓN DESCARGAR: Clona la tabla seleccionada de MariaDB a SQLite y la muestra
+     */
+    @FXML
+    private void onDownload() {
+        String selectedTable = tablesList.getSelectionModel().getSelectedItem();
+        if (selectedTable == null) {
+            messageLabel.setText("Selecciona una tabla de la lista primero.");
             return;
         }
 
         try {
-            ResultSet result = sqliteTabla.getRecords(selectedTable);
+            Connection mariaConn = App.getMariaDB().getConnection();
+            if (mariaConn == null || mariaConn.isClosed()) {
+                messageLabel.setText("Error: No hay conexión activa a MariaDB.");
+                return;
+            }
 
-            displayRecords(result);
+            messageLabel.setText("Clonando tabla '" + selectedTable + "' a SQLite local...");
 
-            result.getStatement().close();
+            // 1. Ejecuta tu grandiosa función del Backend
+            sqliteDb.clonarTablaDesdeMariaDB(mariaConn, selectedTable);
 
-            messageLabel.setText("Registros cargados: " + selectedTable);
+            // 2. Refresca y muestra visualmente los registros ahora locales
+            refreshRecords(selectedTable);
+            messageLabel.setText("Tabla '" + selectedTable + "' descargada y lista localmente.");
 
-        } catch (SQLException e) {
-            messageLabel.setText("Error al cargar los registros: " + e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            messageLabel.setText("Error al clonar tabla: " + e.getMessage());
         }
     }
 
-
     @FXML
     private void onAdd() {
-
         String selectedTable = tablesList.getSelectionModel().getSelectedItem();
-
         if (selectedTable == null) {
             messageLabel.setText("Selecciona una tabla primero.");
             return;
         }
 
         Map<String, Object> values = new LinkedHashMap<>();
+        StringBuilder sql = new StringBuilder("INSERT INTO " + selectedTable + " (");
+        StringBuilder placeholders = new StringBuilder();
+        ArrayList<Object> params = new ArrayList<>();
 
-        // Solicitar el valor de cada columna
+        int count = 0;
         for (TableColumn<Map<String, Object>, ?> column : recordsTable.getColumns()) {
-
             String columnName = column.getText();
-
             TextInputDialog dialog = new TextInputDialog();
             dialog.setTitle("Agregar registro");
             dialog.setHeaderText("Nuevo valor para: " + columnName);
             dialog.setContentText(columnName + ":");
-
             Optional<String> result = dialog.showAndWait();
+            if (result.isEmpty()) return;
 
-            if (result.isEmpty()) {
-                return;
+            sql.append(columnName);
+            placeholders.append("?");
+            params.add(result.get());
+
+            if (++count < recordsTable.getColumns().size()) {
+                sql.append(", ");
+                placeholders.append(", ");
             }
-
-            values.put(columnName, result.get());
         }
+        sql.append(") VALUES (").append(placeholders).append(")");
 
-        sqliteTabla.insertRecord(selectedTable, values);
-
-        refreshRecords(selectedTable);
-
-        messageLabel.setText("Registro agregado.");
+        // Ejecuta usando tu método CRUD genérico
+        if (sqliteDb.ejecutarInstruccionCRUD(sql.toString(), params.toArray())) {
+            refreshRecords(selectedTable);
+            messageLabel.setText("Registro agregado localmente.");
+        } else {
+            messageLabel.setText("Error al insertar el registro.");
+        }
     }
-
 
     @FXML
     private void onUpdate() {
-
         String selectedTable = tablesList.getSelectionModel().getSelectedItem();
-
-        Map<String, Object> selectedRecord =
-                recordsTable.getSelectionModel().getSelectedItem();
+        Map<String, Object> selectedRecord = recordsTable.getSelectionModel().getSelectedItem();
 
         if (selectedTable == null || selectedRecord == null) {
-            messageLabel.setText("Selecciona un registro primero.");
+            messageLabel.setText("Selecciona un registro de la tabla primero.");
             return;
         }
-
-        if (!selectedRecord.containsKey("id")) {
-            messageLabel.setText("No se encontró la columna id.");
+        if (!selectedRecord.containsKey("id") && !selectedRecord.containsKey("ID")) {
+            messageLabel.setText("La tabla debe tener una columna 'id' para actualizar.");
             return;
         }
+        String idKey = selectedRecord.containsKey("id") ? "id" : "ID";
 
-        // Obtener las columnas que se pueden modificar
         ArrayList<String> columns = new ArrayList<>();
-
         for (TableColumn<Map<String, Object>, ?> column : recordsTable.getColumns()) {
-            if (!column.getText().equalsIgnoreCase("id")) {
+            if (!column.getText().equalsIgnoreCase(idKey)) {
                 columns.add(column.getText());
             }
         }
+        if (columns.isEmpty()) return;
 
-        if (columns.isEmpty()) {
-            messageLabel.setText("No hay columnas para modificar.");
-            return;
-        }
-
-        // Elegir la columna
-        ChoiceDialog<String> choiceDialog =
-                new ChoiceDialog<>(columns.get(0), columns);
-
+        ChoiceDialog<String> choiceDialog = new ChoiceDialog<>(columns.get(0), columns);
         choiceDialog.setTitle("Modificar registro");
-        choiceDialog.setHeaderText("Selecciona la columna que deseas modificar");
-
+        choiceDialog.setHeaderText("Selecciona la columna a modificar");
         Optional<String> selectedColumn = choiceDialog.showAndWait();
-
-        if (selectedColumn.isEmpty()) {
-            return;
-        }
+        if (selectedColumn.isEmpty()) return;
 
         String columnName = selectedColumn.get();
-
-        // Solicitar el nuevo valor
-        TextInputDialog dialog = new TextInputDialog(
-                String.valueOf(selectedRecord.get(columnName))
-        );
-
+        TextInputDialog dialog = new TextInputDialog(String.valueOf(selectedRecord.get(columnName)));
         dialog.setTitle("Modificar registro");
         dialog.setHeaderText("Nuevo valor para: " + columnName);
         dialog.setContentText("Valor:");
-
         Optional<String> newValue = dialog.showAndWait();
+        if (newValue.isEmpty()) return;
 
-        if (newValue.isEmpty()) {
-            return;
+        String sql = "UPDATE " + selectedTable + " SET " + columnName + " = ? WHERE " + idKey + " = ?";
+
+        if (sqliteDb.ejecutarInstruccionCRUD(sql, newValue.get(), selectedRecord.get(idKey))) {
+            refreshRecords(selectedTable);
+            messageLabel.setText("Registro modificado en SQLite.");
         }
-
-        sqliteTabla.updateRecord(
-                selectedTable,
-                columnName,
-                newValue.get(),
-                "id",
-                selectedRecord.get("id")
-        );
-
-        refreshRecords(selectedTable);
-
-        messageLabel.setText("Registro modificado.");
     }
-
 
     @FXML
     private void onDelete() {
-
         String selectedTable = tablesList.getSelectionModel().getSelectedItem();
-
-        Map<String, Object> selectedRecord =
-                recordsTable.getSelectionModel().getSelectedItem();
+        Map<String, Object> selectedRecord = recordsTable.getSelectionModel().getSelectedItem();
 
         if (selectedTable == null || selectedRecord == null) {
             messageLabel.setText("Selecciona un registro primero.");
             return;
         }
-
-        if (!selectedRecord.containsKey("id")) {
-            messageLabel.setText("No se encontró la columna id.");
+        String idKey = selectedRecord.containsKey("id") ? "id" : "ID";
+        if (!selectedRecord.containsKey(idKey)) {
+            messageLabel.setText("No se encontró una columna llave id.");
             return;
         }
 
-        // Confirmar eliminación
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-
         alert.setTitle("Eliminar registro");
-        alert.setHeaderText("¿Deseas eliminar este registro?");
-        alert.setContentText("ID: " + selectedRecord.get("id"));
-
+        alert.setHeaderText("¿Deseas eliminar este registro local?");
+        alert.setContentText("ID: " + selectedRecord.get(idKey));
         Optional<ButtonType> result = alert.showAndWait();
 
         if (result.isPresent() && result.get() == ButtonType.OK) {
-
-            sqliteTabla.deleteRecord(
-                    selectedTable,
-                    "id",
-                    selectedRecord.get("id")
-            );
-
-            refreshRecords(selectedTable);
-
-            messageLabel.setText("Registro eliminado.");
+            String sql = "DELETE FROM " + selectedTable + " WHERE " + idKey + " = ?";
+            if (sqliteDb.ejecutarInstruccionCRUD(sql, selectedRecord.get(idKey))) {
+                refreshRecords(selectedTable);
+                messageLabel.setText("Registro eliminado localmente.");
+            }
         }
     }
 
-
-    // Mostrar los registros en la tabla visual
-    private void displayRecords(ResultSet result) throws SQLException {
-
+    private void refreshRecords(String tableName) {
+        try {
+            Connection conn = sqliteDb.getConnection();
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName)) {
+                displayRecords(rs);
+            }
+        } catch (Exception e) {
+            messageLabel.setText("Error al refrescar la tabla local: " + e.getMessage());
+        }
+    }
+    private void displayRecords(ResultSet result) throws Exception {
         recordsTable.getColumns().clear();
-
         ResultSetMetaData metadata = result.getMetaData();
         int numberOfColumns = metadata.getColumnCount();
-
-        // Crear las columnas
         for (int i = 1; i <= numberOfColumns; i++) {
-
             String columnName = metadata.getColumnName(i);
-
-            TableColumn<Map<String, Object>, Object> column =
-                    new TableColumn<>(columnName);
-
-            column.setCellValueFactory(data ->
-                    new ReadOnlyObjectWrapper<>(
-                            data.getValue().get(columnName)
-                    )
-            );
-
+            TableColumn<Map<String, Object>, Object> column = new TableColumn<>(columnName);
+            column.setCellValueFactory(data -> new ReadOnlyObjectWrapper<>(data.getValue().get(columnName)));
             recordsTable.getColumns().add(column);
         }
-
-        // Obtener los registros
-        ObservableList<Map<String, Object>> rows =
-                FXCollections.observableArrayList();
-
+        ObservableList<Map<String, Object>> rows = FXCollections.observableArrayList();
         while (result.next()) {
-
             Map<String, Object> row = new HashMap<>();
-
             for (int i = 1; i <= numberOfColumns; i++) {
                 String columnName = metadata.getColumnName(i);
                 row.put(columnName, result.getObject(i));
             }
-
             rows.add(row);
         }
-
         recordsTable.setItems(rows);
     }
-
-    public void setSQLiteDatabase(SQLiteDatabase database) {
-        this.database = database;
-        this.sqliteTabla = new SQLiteTabla(database.getConnection());
-    }
-
-
-    private void refreshRecords(String tableName) {
-
-        try {
-            ResultSet result = sqliteTabla.getRecords(tableName);
-
-            displayRecords(result);
-
-            result.getStatement().close();
-
-        } catch (SQLException e) {
-            messageLabel.setText(
-                    "Error al actualizar los registros: " + e.getMessage()
-            );
-        }
-    }
-
+    // Ya no necesitas recibir bases de datos viejas desde afuera gracias al inicio global en App
+    public void setSQLiteDatabase(Object dummy) {}
 }
